@@ -1,0 +1,25 @@
+name: vm2-elk
+
+heartbeat.monitors:
+  - type: http
+    id: cms-http
+    name: CMS web
+    schedule: '@every 10s'
+    urls: ["${CMS_URL}"]
+    timeout: 5s
+    check.response.status: [200, 301, 302]
+
+  - type: tcp
+    id: cms-db-port
+    name: CMS database port
+    schedule: '@every 10s'
+    hosts: ["${DB_ADDR}"]
+    timeout: 5s
+
+output.elasticsearch:
+  hosts: ["${ES_HOST}"]
+
+setup.template.settings:
+  index.number_of_replicas: 0
+
+logging.level: info

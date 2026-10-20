@@ -1,0 +1,3 @@
+CREATE USER IF NOT EXISTS 'metricbeat'@'%' IDENTIFIED BY 'metricbeat_pass';
+GRANT PROCESS, REPLICATION CLIENT ON *.* TO 'metricbeat'@'%';
+FLUSH PRIVILEGES;

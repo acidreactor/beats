@@ -1,0 +1,102 @@
+name: vm1-cms
+
+filebeat.inputs:
+  # nginx access: разбор строки через dissect в отдельные поля (доп. задание 5)
+  - type: filestream
+    id: nginx-access
+    paths:
+      - /var/log/lab-nginx/access.log
+    fields_under_root: true
+    fields:
+      service.name: nginx
+      log_type: access
+    processors:
+      - dissect:
+          tokenizer: '%{client.ip} - %{user.name} [%{nginx.time}] "%{http.request.method} %{url.original} HTTP/%{http.version}" %{http.response.status_code} %{http.response.body.bytes} "%{http.request.referrer}" "%{user_agent.original}"'
+          field: message
+          target_prefix: ""
+          ignore_failure: true
+      - convert:
+          fields:
+            - {from: http.response.status_code, type: long}
+            - {from: http.response.body.bytes, type: long}
+          ignore_missing: true
+          fail_on_error: false
+      - timestamp:
+          field: nginx.time
+          layouts:
+            - '02/Jan/2006:15:04:05 -0700'
+          ignore_missing: true
+          ignore_failure: true
+
+  - type: filestream
+    id: nginx-error
+    paths:
+      - /var/log/lab-nginx/error.log
+    fields_under_root: true
+    fields:
+      service.name: nginx
+      log_type: error
+
+  - type: filestream
+    id: php-fpm-error
+    paths:
+      - /var/log/php-fpm/error.log
+    fields_under_root: true
+    fields:
+      service.name: php-fpm
+      log_type: error
+
+  - type: filestream
+    id: php-fpm-access
+    paths:
+      - /var/log/php-fpm/access.log
+    fields_under_root: true
+    fields:
+      service.name: php-fpm
+      log_type: access
+
+  - type: filestream
+    id: mysql-error
+    paths:
+      - /var/log/mysql/error.log
+    fields_under_root: true
+    fields:
+      service.name: mysql
+      log_type: error
+
+  - type: filestream
+    id: mysql-slow
+    paths:
+      - /var/log/mysql/slow.log
+    fields_under_root: true
+    fields:
+      service.name: mysql
+      log_type: slowlog
+    parsers:
+      - multiline:
+          type: pattern
+          pattern: '^# Time:'
+          negate: true
+          match: after
+
+output.elasticsearch:
+  hosts: ["${ES_HOST}"]
+  indices:
+    - index: "lab-logs-nginx-%{+yyyy.MM.dd}"
+      when.equals:
+        service.name: nginx
+    - index: "lab-logs-phpfpm-%{+yyyy.MM.dd}"
+      when.equals:
+        service.name: php-fpm
+    - index: "lab-logs-mysql-%{+yyyy.MM.dd}"
+      when.equals:
+        service.name: mysql
+
+# Индексы и ILM настраиваются на стороне Elasticsearch (vm2-elk/scripts/setup-es.sh)
+setup.ilm.enabled: false
+setup.template.enabled: false
+setup.template.name: "lab-logs"
+setup.template.pattern: "lab-logs-*"
+
+logging.level: info

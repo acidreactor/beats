@@ -1,0 +1,72 @@
+name: vm2-elk
+
+services:
+  elasticsearch:
+    image: elastic/elasticsearch:${STACK_VERSION}
+    restart: unless-stopped
+    environment:
+      - discovery.type=single-node
+      - xpack.security.enabled=false
+      - ES_JAVA_OPTS=-Xms1g -Xmx1g
+    ulimits:
+      memlock:
+        soft: -1
+        hard: -1
+    ports:
+      - "9200:9200"
+    volumes:
+      - es_data:/usr/share/elasticsearch/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -s http://localhost:9200/_cluster/health | grep -vq '\"status\":\"red\"'"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+    networks: [lab-net]
+
+  kibana:
+    image: kibana:${STACK_VERSION}
+    restart: unless-stopped
+    environment:
+      ELASTICSEARCH_HOSTS: http://elasticsearch:9200
+    ports:
+      - "5601:5601"
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks: [lab-net]
+
+  setup:
+    image: curlimages/curl:8.10.1
+    entrypoint: ["/bin/sh", "/scripts/setup-es.sh"]
+    environment:
+      ES_URL: http://elasticsearch:9200
+    volumes:
+      - ./scripts/setup-es.sh:/scripts/setup-es.sh:ro
+    depends_on:
+      elasticsearch:
+        condition: service_healthy
+    networks: [lab-net]
+
+  heartbeat:
+    image: elastic/heartbeat:${STACK_VERSION}
+    restart: unless-stopped
+    user: root
+    command: ["heartbeat", "-e", "--strict.perms=false"]
+    environment:
+      ES_HOST: http://elasticsearch:9200
+      CMS_URL: ${CMS_URL}
+      DB_ADDR: ${DB_ADDR}
+    volumes:
+      - ./heartbeat/heartbeat.yml:/usr/share/heartbeat/heartbeat.yml:ro
+    depends_on:
+      setup:
+        condition: service_completed_successfully
+    networks: [lab-net]
+
+volumes:
+  es_data:
+
+networks:
+  lab-net:
+    external: true
+    name: lab-net
